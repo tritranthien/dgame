@@ -13,37 +13,36 @@ const config = {
     physics: {
         default: 'arcade',
         arcade: {
-            gravity: { y: 300 }, // Trọng lực, thay đổi giá trị để điều chỉnh tốc độ rơi
-            debug: false // Tắt debug nếu không cần
+            gravity: { y: 600},
+            debug: true
         }
     },
 };
 
-const game = new Phaser.Game(config);
-
 let player;
-let flaming;
 let keys;
-let ground;
 let isAttacking;
+let isLeft;
 let fireEffect;
-const speed = 100;
+let speed = 100;
 let moving = false;
+let grounded;
 function preload() {
     autoloadSpritesheets(this);
+    this.load.image('darkstone', 'tilesets/darkstone/Tileset.png');
+    this.load.tilemapTiledJSON('demo', 'maps/demo.tmj');
 }
 function create() {
-    player = this.physics.add.sprite(400, 300, 'Firewizard.Idle');
-    player.setCollideWorldBounds(true); // Đảm bảo player không ra ngoài màn hình
-
-    // Thêm nền cho player đứng
-    ground = this.physics.add.staticGroup(); // Tạo một nhóm vật thể static (không di chuyển)
-    ground.create(380, 500, 'ground'); 
-    this.physics.add.collider(player, ground);
+    player = this.physics.add.sprite(400, 100, 'Firewizard.Idle');
+    player.body.setSize(32, 64);  // Cập nhật kích thước hitbox
+    player.body.setOffset(32, 64); 
+    player.setCollideWorldBounds(true);
+    const map = this.make.tilemap({ key: 'demo' });
+    const tileset = map.addTilesetImage('darkstone', 'darkstone');
+    const layer = map.createLayer('demo', tileset);
+    layer.setCollisionByProperty({ collides: true });
+    this.physics.add.collider(player, layer);
     fireEffect = this.add.sprite(player.x + 25, player.y + 25, 'Firewizard.Charge');
-    flaming = this.physics.add.sprite(416, 300, 'Firewizard.Flame_jet');
-    this.physics.add.collider(flaming, ground);
-    flaming.setVisible(false);
     fireEffect.setScale(2);
     fireEffect.setVisible(false);
     this.anims.create({
@@ -83,28 +82,21 @@ function create() {
         repeat: -1,
     });
     this.anims.create({
+        key: 'run',
+        frames: this.anims.generateFrameNumbers('Firewizard.Run', { start: 0, end: 7 }),
+        frameRate: 8,
+        repeat: -1,
+    });
+    this.anims.create({
         key: 'jump',
         frames: this.anims.generateFrameNumbers('Firewizard.Jump', { start: 4, end: 7 }),
         frameRate: 8,
         repeat: 0,
     });
-    keys = this.input.keyboard.addKeys('A,S,D,SPACE,LEFT,RIGHT');
+    keys = this.input.keyboard.addKeys('A,S,D,SPACE,LEFT,RIGHT,SHIFT');
     player.on('animationcomplete', (animation, frame) => {
         if (['attack1', 'attack2', 'attack3'].includes(animation.key)) {
-            flaming.setVisible(false);
-            player.setVisible(true);
-            player.setTexture('Firewizard.Idle');
-            player.setFrame(0);
-            if (fireEffect) fireEffect.setVisible(false);
-            isAttacking = false;
-        }
-    });
-    flaming.on('animationcomplete', (animation, frame) => {
-        if (['attack1', 'attack2', 'attack3'].includes(animation.key)) {
-            flaming.setVisible(false);
-            player.setVisible(true);
-            player.setTexture('Firewizard.Idle');
-            player.setFrame(0);
+            player.play('idle', true);
             if (fireEffect) fireEffect.setVisible(false);
             isAttacking = false;
         }
@@ -112,69 +104,74 @@ function create() {
 }
 
 function update() {
+    grounded = player.body.blocked.down || player.body.onFloor();
     if (isAttacking) {
         return;
-    }
+    }    
     if (
-        !player.anims.isPlaying &&
-        !isAttacking &&
-        player.body.touching.down
+    grounded &&
+        !isAttacking
     ) {
-        player.play('idle');
+        if (moving) {
+            if (keys.SHIFT.isDown) {
+                player.play('run', true);
+            } else {
+                player.play('walk', true);
+            }
+        }
+        else {
+            player.play('idle', true);
+        }
     }
-    if (
-    moving &&
-    player.body.touching.down &&
-        !isAttacking &&
-        player.anims.currentAnim?.key !== 'walk'
-    ) {
-        player.play('walk', true);
-    }
-    if (!moving && player.body.touching.down && player.anims.currentAnim?.key === 'walk') {
+    if (!moving && player.body.touching.down && ['walk','run'].includes(player.anims.currentAnim?.key)) {
         player.play('idle', true);
-        player.setFrame(0);
     }
     if (Phaser.Input.Keyboard.JustDown(keys.A)) {
-        player.setTexture('Firewizard.Attack_1');
         player.play('attack1');
-        fireEffect.x = player.x + 25;
         fireEffect.y = player.y + 25;
+        if (isLeft) {
+            fireEffect.setFlipX(true);
+            fireEffect.x = player.x - 25;
+        } else {
+            fireEffect.setFlipX(false);
+            fireEffect.x = player.x + 25;
+        }
         fireEffect.setVisible(true);
         fireEffect.play('chargeEffect');
         isAttacking = true;
     }
     if (Phaser.Input.Keyboard.JustDown(keys.S)) {
-        player.setTexture('Firewizard.Attack_2');
         player.play('attack2');
         isAttacking = true;
     }
     if (Phaser.Input.Keyboard.JustDown(keys.D)) {
-        player.setVisible(false);
-        flaming.setVisible(true);
-        flaming.play('attack3');
+        player.play('attack3');
         isAttacking = true;
     }
-    if (Phaser.Input.Keyboard.JustDown(keys.SPACE) && player.body.touching.down) {
-        player.setTexture('Firewizard.Jump');
+    if (Phaser.Input.Keyboard.JustDown(keys.SPACE) && grounded) {
         player.play('jump');
-        player.setVelocityY(-200);
-        isAttacking = true;
+        player.setVelocityY(-300);
     }
-    if (keys.LEFT.isDown || keys.A.isDown) {
+    if (keys.SHIFT.isDown) {
+        speed = 200;
+    } else {
+        speed = 100;
+    }
+    if (keys.LEFT.isDown) {
         player.setVelocityX(-speed);
-        player.setFlipX(true); // Quay mặt sang trái
+        isLeft = true;
+        player.setFlipX(true);
+        player.setOffset(64, 64);
         moving = true;
-    } else if (keys.RIGHT.isDown || keys.D.isDown) {
+    } else if (keys.RIGHT.isDown) {
         player.setVelocityX(speed);
-        player.setFlipX(false); // Quay mặt sang phải
+        isLeft = false;
+        player.setFlipX(false);
+        player.setOffset(32, 64);
         moving = true;
     } else {
         player.setVelocityX(0);
         moving = false;
     }
-    if (player.body.touching.down && player.anims.currentAnim.key === 'jump') {
-        player.setTexture('Firewizard.Idle');
-        // player.play('idle');
-        isAttacking = false;
-    }
 }
+new Phaser.Game(config);
