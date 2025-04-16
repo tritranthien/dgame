@@ -27,6 +27,7 @@ let fireEffect;
 let speed = 100;
 let moving = false;
 let grounded;
+let attackHitBox;
 function preload() {
     autoloadSpritesheets(this);
     this.load.image('darkstone', 'tilesets/darkstone/Tileset.png');
@@ -34,7 +35,7 @@ function preload() {
 }
 function create() {
     player = this.physics.add.sprite(400, 100, 'Firewizard.Idle');
-    player.body.setSize(32, 64);  // Cập nhật kích thước hitbox
+    player.body.setSize(32, 64);
     player.body.setOffset(32, 64); 
     player.setCollideWorldBounds(true);
     const map = this.make.tilemap({ key: 'demo' });
@@ -42,9 +43,18 @@ function create() {
     const layer = map.createLayer('demo', tileset);
     layer.setCollisionByProperty({ collides: true });
     this.physics.add.collider(player, layer);
-    fireEffect = this.add.sprite(player.x + 25, player.y + 25, 'Firewizard.Charge');
+    fireEffect = this.physics.add.sprite(player.x + 25, player.y + 25, 'Firewizard.Charge');
     fireEffect.setScale(2);
     fireEffect.setVisible(false);
+    fireEffect.body.setAllowGravity(false);
+    fireEffect.body.setEnable(false);
+    attackHitBox = this.physics.add.sprite(player.x + 25, player.y + 25, null);
+    attackHitBox.body.setSize(64, 32);
+    attackHitBox.body.setOffset(32, 64); 
+    attackHitBox.body.setAllowGravity(false);
+    attackHitBox.body.setEnable(false);
+    attackHitBox.setVisible(false);
+    // this.physics.add.overlap(fireEffect, enemyGroup, damageEnemy, null, this);
     this.anims.create({
         key: 'idle',
         frames: this.anims.generateFrameNumbers('Firewizard.Idle', { start: 0, end: 6 }),
@@ -54,25 +64,25 @@ function create() {
     this.anims.create({
         key: 'attack1',
         frames: this.anims.generateFrameNumbers('Firewizard.Attack_1', { start: 0, end: 3 }),
-        frameRate: 8,
+        frameRate: 6,
         repeat: 0
     });
     this.anims.create({
         key: 'attack2',
         frames: this.anims.generateFrameNumbers('Firewizard.Attack_2', { start: 0, end: 3 }),
-        frameRate: 8,
+        frameRate: 16,
         repeat: 0
     });
     this.anims.create({
         key: 'chargeEffect',
         frames: this.anims.generateFrameNumbers('Firewizard.Charge', { start: 0, end: 11 }),
-        frameRate: 24,
+        frameRate: 20,
         repeat: 0
     });
     this.anims.create({
         key: 'attack3',
         frames: this.anims.generateFrameNumbers('Firewizard.Flame_jet', { start: 0, end: 13 }),
-        frameRate: 24,
+        frameRate: 13,
         repeat: 0,
     });
     this.anims.create({
@@ -97,7 +107,11 @@ function create() {
     player.on('animationcomplete', (animation, frame) => {
         if (['attack1', 'attack2', 'attack3'].includes(animation.key)) {
             player.play('idle', true);
-            if (fireEffect) fireEffect.setVisible(false);
+            if (fireEffect) {
+                fireEffect.body.setEnable(false);
+                fireEffect.setVisible(false);
+            }
+            attackHitBox.body.setEnable(false);
             isAttacking = false;
         }
     });
@@ -137,15 +151,33 @@ function update() {
             fireEffect.x = player.x + 25;
         }
         fireEffect.setVisible(true);
+        fireEffect.body.setEnable(true);
+        fireEffect.body.setSize(45, 38); 
         fireEffect.play('chargeEffect');
         isAttacking = true;
     }
     if (Phaser.Input.Keyboard.JustDown(keys.S)) {
         player.play('attack2');
+        attackHitBox.y = player.y + 25;
+        attackHitBox.body.setSize(50, 20);
+        if (isLeft) {
+            attackHitBox.x = player.x - 30;
+        } else {
+            attackHitBox.x = player.x + 30;
+        }
+        attackHitBox.body.setEnable(true);
         isAttacking = true;
     }
     if (Phaser.Input.Keyboard.JustDown(keys.D)) {
         player.play('attack3');
+        attackHitBox.y = player.y + 25;
+        attackHitBox.body.setSize(50, 75);
+        if (isLeft) {
+            attackHitBox.x = player.x - 40;
+        } else {
+            attackHitBox.x = player.x + 40;
+        }
+        attackHitBox.body.setEnable(true);
         isAttacking = true;
     }
     if (Phaser.Input.Keyboard.JustDown(keys.SPACE) && grounded) {
@@ -157,13 +189,13 @@ function update() {
     } else {
         speed = 100;
     }
-    if (keys.LEFT.isDown) {
+    if (keys.LEFT.isDown && !isAttacking) {
         player.setVelocityX(-speed);
         isLeft = true;
         player.setFlipX(true);
         player.setOffset(64, 64);
         moving = true;
-    } else if (keys.RIGHT.isDown) {
+    } else if (keys.RIGHT.isDown &&!isAttacking) {
         player.setVelocityX(speed);
         isLeft = false;
         player.setFlipX(false);
@@ -172,6 +204,11 @@ function update() {
     } else {
         player.setVelocityX(0);
         moving = false;
+    }
+}
+function damageEnemy(fireEffect, enemy) {
+    if (fireEffect.visible && fireEffect.body.enable) {
+        enemy.takeDamage(10);
     }
 }
 new Phaser.Game(config);
